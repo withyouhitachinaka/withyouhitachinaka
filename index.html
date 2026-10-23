@@ -154,6 +154,35 @@ td.c{text-align:center}
 textarea{width:100%;min-height:120px;font-family:var(--f-num);font-size:12px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:6px;z-index:50;font-size:13px}
 @media (prefers-reduced-motion:no-preference){.trip{transition:box-shadow .3s}}
+/* ボード表示（ホワイトボードのマグネット風） */
+.board-sheet{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.board-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.board-top h2{font-size:22px}
+.board-h{margin:14px 0 6px}
+.board-h .kind{display:inline-block;padding:2px 14px;font-family:var(--f-display);font-weight:700;font-size:17px;color:#fff;background:#2F6FAD;border-radius:3px}
+.board-h .kind.drop{background:#2F6FAD}
+table.mg td{vertical-align:middle;padding:5px 6px}
+table.mg{table-layout:fixed;min-width:640px}
+table.mg th:nth-child(1),table.mg th:nth-child(2){width:17%}
+table.mg th:nth-child(4),table.mg th:nth-child(5){width:12%}
+.mg-kid{max-width:100%}
+table.mg tr.mg-first td{border-top:2px solid var(--line)}
+table.mg td[rowspan]{border-bottom:2px solid var(--line)}
+.mg-car{display:inline-block;border:3px solid var(--vc);border-radius:4px;padding:1px 10px;font-family:var(--f-display);font-weight:700;font-size:16px;white-space:nowrap;background:var(--surface)}
+.mg-drv{display:inline-block;background:#F7D23A;color:#17212B;padding:1px 10px;font-family:var(--f-display);font-weight:700;font-size:16px;white-space:nowrap}
+.mg-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.mg-label{display:inline-block;border:1px solid var(--line);background:var(--surface);padding:1px 12px;font-family:var(--f-display);font-weight:700;font-size:16px}
+.mg-kid{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:5.5em;border:1px solid var(--line);background:var(--surface);padding:1px 8px;margin:2px 4px 2px 0;line-height:1.25;box-shadow:0 1px 2px rgba(0,0,0,.12);white-space:nowrap;font-weight:500}
+.mg-kid small{font-size:10px;color:var(--muted);font-weight:400}
+.mg-tm{font-family:var(--f-num);font-size:17px;font-weight:600;white-space:nowrap}
+@media print{
+  @page{size:A4 portrait;margin:8mm}
+  :root{color-scheme:light}
+  body{background:#fff;padding:0}
+  header.top,nav.tabs,#banners,.daybar,.layout>div:first-child,.stats,.issues,.actions,#copy-area,.no-print,.toast{display:none!important}
+  .layout{display:block}
+  .board-sheet{border:0;padding:0}
+}
 /* まとめて作成 */
 .bulk-days{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 /* 送迎の記録（スマホで押しやすく） */

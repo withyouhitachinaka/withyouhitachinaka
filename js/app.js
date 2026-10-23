@@ -5,7 +5,7 @@ const VCOLORS=['v1','v2','v3','v4','v5','v6','v7','v8'];
 const DEF={facilityName:'',closeTime:'17:00',holidayStart:'10:00',holidayEnd:'16:00',escortMode:'always',escortMin:4,minStay:1,waitTol:10,carWait:10,schoolHop:5,houseHop:3,areaHop:10,mixAreas:false,buffer:5,maxRide:60,areas:[]};
 const TABS=[['plan','送迎表'],['record','記録'],['children','児童'],['schools','学校'],['vehicles','車両'],['staff','スタッフ'],['import','取り込み'],['settings','設定']];
 const S={db:null,dbState:'loading',canWrite:true,downloads:null,settings:{...DEF},sample:false,schools:[],children:[],vehicles:[],staff:[],
-  date:todayStr(),day:emptyDay(),tab:'plan',view:'vehicle',bulk:null,recMonth:'',logs:[],edit:null,confirm:null,imp:{target:'children',rows:null,header:true,map:{},dateDefault:'',offOthers:true,nick:true,addr:false,msg:''}};
+  date:todayStr(),day:emptyDay(),tab:'plan',view:'board',bulk:null,recMonth:'',logs:[],edit:null,confirm:null,imp:{target:'children',rows:null,header:true,map:{},dateDefault:'',offOthers:true,nick:true,addr:false,msg:''}};
 let dayUnsub=null,dayTimer=null,dayDirty=false;
 
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -35,10 +35,14 @@ function isHoliday(){const t=S.day.dayType;if(t)return t==='holiday';const w=wdO
 function L(){const s=st();return {s,sch:byId(S.schools),ch:byId(S.children),veh:byId(S.vehicles),stf:byId(S.staff),ar:byId(s.areas||[])}}
 function childMin(c,l){return +c.min||+(l.ar[c.areaId]?.min)||15}
 function schoolMin(sc,l){return +sc?.min||+(l.ar[sc?.areaId]?.min)||10}
+// 車で送迎しない子：保護者の送迎・自走（自分で来る・帰る）
+const OTHER={parent:'保護者',self:'自走'};
+const pickSel=a=>a.pickup?placeOf(a):(a.pickOther||'none');
+const dropSel=a=>a.drop?'car':(a.dropOther||'none');
 function attendance(){
   const w=wdOf(S.date),out=[];
   for(const c of S.children){
-    const base={on:(c.days||[]).includes(w),pickup:c.pickup!==false,drop:c.drop!==false,pickPlace:c.pickPlace||'school',pickTime:'',arriveBy:'',dropTime:''};
+    const base={on:(c.days||[]).includes(w),pickup:c.pickup!==false,drop:c.drop!==false,pickPlace:c.pickPlace||'school',pickOther:c.pickOther||'',dropOther:c.dropOther||'',pickTime:'',arriveBy:'',dropTime:''};
     out.push({c,...base,...(S.day.attend?.[c.id]||{})});
   }
   return out;
@@ -344,6 +348,7 @@ function cleanRec(x){
     else if(k==='days')o[k]=(Array.isArray(v)?v:[]).map(Number).filter(d=>Number.isInteger(d)&&d>=0&&d<=6);
     else if(k==='color')o[k]=VCOLORS.includes(v)?v:'v1';
     else if(k==='pickPlace')o[k]=v==='home'?'home':'school';
+    else if(k==='pickOther'||k==='dropOther')o[k]=v==='parent'||v==='self'?v:'';
     else if(k==='kind')o[k]=v==='drop'?'drop':'pickup';
     else if(k==='date')o[k]=typeof v==='string'&&DATE_RE.test(v)?v:'';
     else if(k==='times'){const t={};for(const [d,tt] of Object.entries(objOr(v)))if(/^[0-6]$/.test(d))t[d]={lo:timeOr(objOr(tt).lo),hi:timeOr(objOr(tt).hi)};o[k]=t}
@@ -375,6 +380,7 @@ function cleanDay(x){
   o.dayType=['school','holiday'].includes(x.dayType)?x.dayType:'';
   for(const [c,v] of Object.entries(objOr(x.attend)))if(isId(c)){const a=objOr(v),r={};
     for(const k of ['on','pickup','drop'])if(typeof a[k]==='boolean')r[k]=a[k];
+    for(const k of ['pickOther','dropOther'])if(['parent','self',''].includes(a[k]))r[k]=a[k];
     if(a.pickPlace!==undefined)r.pickPlace=a.pickPlace==='home'?'home':'school';
     for(const k of ['pickTime','arriveBy','dropTime'])if(a[k]!==undefined)r[k]=timeOr(a[k]);
     o.attend[c]=r}
@@ -564,12 +570,11 @@ function vPlan(){
     const c=a.c,pt=pickTimeFor({...a,pickTime:''},l),dtm=dropTimeFor({...a,dropTime:''},l);
     h+=`<tr class="${a.on?'':'off'}"><td class="c"><input type="checkbox" id="at-on-${c.id}" data-act="att" data-c="${c.id}" data-f="on"${a.on?' checked':''} aria-label="${esc(c.name)} 利用"></td>
       <td><div>${esc(c.name)}</div><div class="muted small">${esc(l.sch[c.schoolId]?.name||'学校未設定')} ${gradeLabel(c.grade)}${c.seat?' <span class="tag">シート</span>':''}${c.needEscort?' <span class="tag">添乗</span>':''}</div></td>
-      <td class="c"><input type="checkbox" id="at-pk-${c.id}" data-act="att" data-c="${c.id}" data-f="pickup"${a.pickup?' checked':''}${a.on?'':' disabled'} aria-label="お迎え">
-        ${hol?'':`<select id="at-pl-${c.id}" data-act="att" data-c="${c.id}" data-f="pickPlace" aria-label="迎えの場所" style="display:block;margin-top:2px;padding:1px 2px;font-size:12px"${a.on&&a.pickup?'':' disabled'}>${opt('school','学校',placeOf(a))}${opt('home','自宅',placeOf(a))}</select>`}</td>
+      <td class="c"><select id="at-pk-${c.id}" data-act="att" data-c="${c.id}" data-f="pickSel" aria-label="お迎え" style="padding:2px;font-size:12px"${a.on?'':' disabled'}>${hol?'':opt('school','学校',pickSel(a))}${opt('home','自宅',pickSel(a))}${opt('parent','保護者',pickSel(a))}${opt('self','自走',pickSel(a))}${opt('none','なし',pickSel(a))}</select></td>
       <td><label class="muted small" for="at-ab-${c.id}">入室</label><input type="time" id="at-ab-${c.id}" data-act="att" data-c="${c.id}" data-f="arriveBy" value="${esc(a.arriveBy||'')}"${a.on?'':' disabled'}>
         <label class="muted small" for="at-pt-${c.id}">迎え</label><input type="time" id="at-pt-${c.id}" data-act="att" data-c="${c.id}" data-f="pickTime" value="${esc(a.pickTime)}" title="通常：${esc(pt||'未設定')}"${a.on&&a.pickup?'':' disabled'}><div class="muted small num">${a.pickTime?'迎え時刻を変更':pt?(placeOf(a)==='home'?'家 ':'下校 ')+pt:(deadlineOf(a,l)!=null?'入室から逆算':'未設定')}</div></td>
-      <td class="c"><input type="checkbox" id="at-dr-${c.id}" data-act="att" data-c="${c.id}" data-f="drop"${a.drop?' checked':''}${a.on?'':' disabled'} aria-label="送り"></td>
-      <td><input type="time" id="at-dt-${c.id}" data-act="att" data-c="${c.id}" data-f="dropTime" value="${esc(a.dropTime)}"${a.on&&a.drop?'':' disabled'}><div class="muted small num">${a.dropTime?'変更':dtm}</div></td></tr>`;
+      <td class="c"><select id="at-dr-${c.id}" data-act="att" data-c="${c.id}" data-f="dropSel" aria-label="送り" style="padding:2px;font-size:12px"${a.on?'':' disabled'}>${opt('car','車',dropSel(a))}${opt('parent','保護者',dropSel(a))}${opt('self','自走',dropSel(a))}${opt('none','なし',dropSel(a))}</select></td>
+      <td><input type="time" id="at-dt-${c.id}" data-act="att" data-c="${c.id}" data-f="dropTime" value="${esc(a.dropTime)}"${a.on&&(a.drop||a.dropOther)?'':' disabled'}><div class="muted small num">${a.dropTime?'変更':dtm}</div></td></tr>`;
   }
   h+=`</tbody></table></div></div>`;
   // 学校の時刻変更
@@ -601,9 +606,9 @@ function vResult(l){
   let h=`<div class="stats"><span class="chip">お迎え <b>${pk}</b>便</span><span class="chip">送り <b>${dr}</b>便</span><span class="chip">使用車両 <b>${new Set(trips.map(t=>t.vehicleId).filter(Boolean)).size}</b>台</span>
     ${bad?`<span class="chip bad">要対応 <b>${bad}</b></span>`:''}${warn?`<span class="chip warn">注意 <b>${warn}</b></span>`:''}${!bad&&!warn?'<span class="chip ok">問題なし</span>':''}
     <span style="flex:1"></span>
-    <span class="seg"><button id="vw-v" data-act="view" data-v="vehicle" aria-pressed="${S.view==='vehicle'}">便ごと</button><button id="vw-c" data-act="view" data-v="child" aria-pressed="${S.view==='child'}">児童ごと</button><button id="vw-s" data-act="view" data-v="staff" aria-pressed="${S.view==='staff'}">スタッフごと</button></span></div>`;
+    <span class="seg"><button id="vw-b" data-act="view" data-v="board" aria-pressed="${S.view==='board'}">ボード</button><button id="vw-v" data-act="view" data-v="vehicle" aria-pressed="${S.view==='vehicle'}">便ごと</button><button id="vw-c" data-act="view" data-v="child" aria-pressed="${S.view==='child'}">児童ごと</button><button id="vw-s" data-act="view" data-v="staff" aria-pressed="${S.view==='staff'}">スタッフごと</button></span></div>`;
   if(iss.length)h+=`<ul class="issues">${iss.slice(0,40).map(i=>`<li class="${i.lv}"><span>${i.lv==='bad'?'●':'▲'}</span><span>${esc(i.txt)}</span></li>`).join('')}${iss.length>40?`<li class="warn">ほか ${iss.length-40}件</li>`:''}</ul>`;
-  h+=`<div class="panel"><div class="panel-h"><h3>運行タイムライン</h3><span class="muted small">棒を押すとその便に移動します</span></div><div class="scroll">${gantt(c,l)}</div>
+  h+=`<div class="panel${S.view==='board'?' no-print':''}"><div class="panel-h"><h3>運行タイムライン</h3><span class="muted small">棒を押すとその便に移動します</span></div><div class="scroll">${gantt(c,l)}</div>
     <div class="legend"><span><i></i>お迎え（学校など→事業所）</span><span><i class="d"></i>送り（事業所→自宅）</span></div></div>`;
   h+=`<div class="actions" style="margin:14px 0">
     <button class="btn" id="copy-text" data-act="copytext">連絡用テキストをコピー</button>
@@ -612,6 +617,7 @@ function vResult(l){
   if(S.copyText)h+=`<textarea id="copy-area" readonly style="margin-bottom:14px">${esc(S.copyText)}</textarea>`;
   const un=iss.filter(i=>i.cid);
   if(un.length)h+=`<div class="panel" style="margin-bottom:14px"><h3>便が決まっていない児童</h3><div class="kids" style="margin-top:8px">${un.map(i=>kidChip(i.cid,i.kind,null,trips,l)).join('')}</div></div>`;
+  if(S.view==='board')return h+boardView(c,l);
   if(S.view==='child')return h+childTable(c,l);
   if(S.view==='staff')return h+staffTable(c,l);
   for(const kind of ['pickup','drop']){
@@ -674,10 +680,41 @@ function childTable(c,l){
   let h=`<div class="panel"><div class="scroll"><table><thead><tr><th>名前</th><th>学校</th><th>お迎え</th><th>送り</th></tr></thead><tbody>`;
   for(const a of att){
     const p=find(a.c.id,'pickup'),d=find(a.c.id,'drop');
-    const cell=(x,want)=>!want?'<span class="muted">なし</span>':x?`<span class="num">${hm(x.s.time)}</span> ${esc(x.t.label)}・${esc(l.veh[x.t.vehicleId]?.name||'車未定')}<div class="muted small">運転 ${esc(l.stf[x.t.driverId]?.name||'未定')}${x.t.escortId?'／添乗 '+esc(l.stf[x.t.escortId]?.name):''}</div>`:'<span class="chip bad">未定</span>';
-    h+=`<tr><td>${esc(a.c.name)}</td><td>${esc(l.sch[a.c.schoolId]?.name||'')} ${gradeLabel(a.c.grade)}</td><td>${cell(p,a.pickup)}</td><td>${cell(d,a.drop)}</td></tr>`;
+    const cell=(x,want,other)=>!want?(other?`<span class="tag">${OTHER[other]}</span>`:'<span class="muted">なし</span>'):x?`<span class="num">${hm(x.s.time)}</span> ${esc(x.t.label)}・${esc(l.veh[x.t.vehicleId]?.name||'車未定')}<div class="muted small">運転 ${esc(l.stf[x.t.driverId]?.name||'未定')}${x.t.escortId?'／添乗 '+esc(l.stf[x.t.escortId]?.name):''}</div>`:'<span class="chip bad">未定</span>';
+    h+=`<tr><td>${esc(a.c.name)}</td><td>${esc(l.sch[a.c.schoolId]?.name||'')} ${gradeLabel(a.c.grade)}</td><td>${cell(p,a.pickup,a.pickOther)}</td><td>${cell(d,a.drop,a.dropOther)}</td></tr>`;
   }
   return h+'</tbody></table></div></div>';
+}
+
+// ---- ボード表示（事業所のホワイトボードと同じ並び） ----
+function boardView(c,l){
+  const att=attendance().filter(a=>a.on),dt=new Date(S.date+'T00:00:00');
+  const car=v=>`<span class="mg-car" style="--vc:${vColor(v)}">${esc(v?.name||'車未定')}</span>`;
+  const drv=t=>`<span class="mg-drv">${esc(l.stf[t.driverId]?.name||'運転手未定')}</span>${t.escortId?`<div class="mg-sub">添乗 ${esc(l.stf[t.escortId]?.name||'')}</div>`:''}`;
+  const kids=ids=>ids.map(id=>{const k=l.ch[id];return k?`<span class="mg-kid">${k.kana?`<small>${esc(k.kana)}</small>`:''}${esc(k.name)}</span>`:''}).join('');
+  const section=(kind,title,timeHead)=>{
+    const rows=[];
+    for(const {t,r} of c.filter(x=>x.t.kind===kind)){
+      const n=r.stops.length||1;
+      const html=r.stops.map((x,i)=>`<tr${i===0?' class="mg-first"':''}>${i===0?`<td rowspan="${n}">${car(l.veh[t.vehicleId])}</td><td rowspan="${n}">${drv(t)}</td>`:''}<td>${kids(x.childIds)}</td>${i===0?`<td rowspan="${n}" class="mg-tm">${hm(r.dep)}</td>`:''}<td class="mg-tm">${hm(x.time)}</td></tr>`).join('');
+      rows.push({tm:r.dep??0,html});
+    }
+    // 保護者・自走は、同じ時刻の子をまとめて1行に
+    const groups={};
+    for(const a of att){
+      const other=kind==='pickup'?(!a.pickup&&a.pickOther):(!a.drop&&a.dropOther);if(!other)continue;
+      const time=kind==='pickup'?(a.arriveBy||a.pickTime||(isHoliday()?l.s.holidayStart:a.c.arriveBy)||''):dropTimeFor(a,l);
+      const g=(groups[other+'|'+time]=groups[other+'|'+time]||{other,time,ids:[]});g.ids.push(a.c.id);
+    }
+    for(const g of Object.values(groups))rows.push({tm:tm(g.time)??9e9,html:`<tr class="mg-first"><td colspan="2"><span class="mg-label">${OTHER[g.other]}</span></td><td>${kids(g.ids)}</td><td></td><td class="mg-tm">${esc(g.time||'--:--')}</td></tr>`});
+    rows.sort((a,b)=>a.tm-b.tm);
+    return `<div class="board-h"><span class="kind ${kind}">${title}</span></div>
+      <div class="scroll"><table class="mg"><thead><tr><th>配車</th><th>運転手</th><th>利用者</th><th>出発時間</th><th>${timeHead}</th></tr></thead>
+      <tbody>${rows.map(x=>x.html).join('')||'<tr><td colspan="5" class="muted">なし</td></tr>'}</tbody></table></div>`;
+  };
+  return `<div class="board-sheet">
+    <div class="board-top"><h2>${dt.getMonth()+1}月${dt.getDate()}日（${WD[dt.getDay()]}）</h2><button class="btn sm no-print" id="board-print" data-act="print">印刷</button></div>
+    ${section('pickup','迎え','迎え時間')}${section('drop','送り','送り時間')}</div>`;
 }
 
 // ---- スタッフ別の予定表 ----
@@ -855,9 +892,9 @@ function vChildren(){
     esc(l.sch[x.schoolId]?.name||'<未設定>')+' '+gradeLabel(x.grade),
     esc(l.ar[x.areaId]?.name||'')+(x.min?` <span class="num muted">${x.min}分</span>`:''),
     (x.days||[]).slice().sort((a,b)=>(a||7)-(b||7)).map(d=>WD[d]).join(''),
-    (x.pickup!==false?(x.pickPlace==='home'?'迎(家'+(x.homePickTime?' '+esc(x.homePickTime):'')+')':'迎(学校)'):'－')+'/'+(x.drop!==false?'送':'－')+(x.dropTime?` <span class="num muted">${esc(x.dropTime)}</span>`:''),
+    (x.pickup!==false?(x.pickPlace==='home'?'迎(家'+(x.homePickTime?' '+esc(x.homePickTime):'')+')':'迎(学校)'):(OTHER[x.pickOther]||'－'))+'/'+(x.drop!==false?'送':(OTHER[x.dropOther]||'－'))+(x.dropTime?` <span class="num muted">${esc(x.dropTime)}</span>`:''),
     `<span class="small muted">${esc(x.note||'')}</span>`],
-  o=>`<p class="muted small">本名は入れず、職員が分かる呼び方にしてください（例：さとうH、はる（佐））。</p><div class="form">${f('f-name','呼び名',o.name,'text','placeholder="例：さとうH"')}${f('f-kana','並び順用の読み（任意）',o.kana)}
+  o=>`<p class="muted small">本名は入れず、職員が分かる呼び方にしてください（例：さとうH、はる（佐））。</p><div class="form">${f('f-name','呼び名',o.name,'text','placeholder="例：さとうH"')}${f('f-kana','ふりがな（ボードで名前の上に出ます・任意）',o.kana)}
     ${fsel('f-schoolId','学校',o.schoolId,[['','（未設定）'],...S.schools.map(s=>[s.id,s.name])])}
     ${fsel('f-grade','学年',o.grade,[['',''],...[1,2,3,4,5,6,7,8,9,10,11,12].map(g=>[g,gradeLabel(g)])])}
     ${f('f-address','自宅の目印（住所は書かなくてOK）',o.address,'text','placeholder="例：中央町・コンビニ横"')}
@@ -865,7 +902,8 @@ function vChildren(){
     ${f('f-min','事業所から自宅まで（分）',o.min,'number','min="1" max="120" placeholder="空欄なら地区の時間"')}
     ${f('f-dropTime','いつもの退室（送り）時刻',o.dropTime,'time')}
     ${fdays(o.days)}
-    ${fsel('f-pickPlace','いつもの迎えの場所',o.pickPlace||'school',[['school','学校'],['home','自宅']])}${f('f-homePickTime','自宅へ迎えに行く時刻（任意）',o.homePickTime,'time')}${f('f-arriveBy','いつもの入室時間（任意）',o.arriveBy,'time')}${fcb('f-pickup','お迎えあり',o.pickup!==false)}${fcb('f-drop','送りあり',o.drop!==false)}
+    ${fsel('f-pickPlace','いつもの迎えの場所',o.pickPlace||'school',[['school','学校'],['home','自宅']])}${f('f-homePickTime','自宅へ迎えに行く時刻（任意）',o.homePickTime,'time')}${f('f-arriveBy','いつもの入室時間（任意）',o.arriveBy,'time')}${fcb('f-pickup','お迎えあり（車）',o.pickup!==false)}${fcb('f-drop','送りあり（車）',o.drop!==false)}
+    ${fsel('f-pickOther','車で迎えないときの来所',o.pickOther||'',[['','—'],['parent','保護者'],['self','自走']])}${fsel('f-dropOther','車で送らないときの帰り',o.dropOther||'',[['','—'],['parent','保護者'],['self','自走']])}
     ${fcb('f-seat','チャイルド／ジュニアシートが必要',o.seat)}${fcb('f-needEscort','添乗員が必要',o.needEscort)}
     <div class="wide">${f('f-note','メモ',o.note)}</div>
     <div class="wide"><label for="f-realName">HUG照合用の本名（任意・本名そのものは保存されません）<input id="f-realName" data-fld="realName" type="text" value="" placeholder="${o.nameKey?'登録済み（変えるときだけ入力）':'HUGの利用予定を取り込むときの照合に使います'}" autocomplete="off"></label></div></div>
@@ -1143,12 +1181,13 @@ document.addEventListener('click',async e=>{
   else if(a==='view'){S.view=b.dataset.v;render()}
   else if(a==='jump'){S.view='vehicle';render();const el=document.getElementById('trip-'+b.dataset.t);if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1400)}}
   else if(a==='copytext'){await copyText(planText())}
+  else if(a==='print'){window.print()}
   else if(a==='copystaff'){const l=L(),p=l.stf[b.dataset.p];if(p)await copyText(staffText(p,labelTrips(planTrips(),l),l))}
   else if(a==='copyel'){const el=document.getElementById(b.dataset.id);if(el)await copyText(el.value)}
   else if(a==='bulk-open'){if(S.bulk)S.bulk=null;else{const [from,to]=weekRange(S.date);S.bulk={from,to,type:'auto',over:false}}render()}
   else if(a==='bulk-range'){const [from,to]=(b.dataset.v==='month'?monthRange:weekRange)(S.date);Object.assign(S.bulk,{from,to,result:null});render()}
   else if(a==='bulk-go'){await bulkGen()}
-  else if(a==='goto'){S.date=b.dataset.d;S.tab='plan';S.view='vehicle';subDay();render();window.scrollTo(0,document.getElementById('gen')?.offsetTop||0)}
+  else if(a==='goto'){S.date=b.dataset.d;S.tab='plan';S.view='board';subDay();render();window.scrollTo(0,document.getElementById('gen')?.offsetTop||0)}
   else if(a==='imp-bulk'){const [from,to]=S.imp.lastRange;S.bulk={from,to,type:'auto',over:false};S.tab='plan';render();window.scrollTo(0,0)}
   else if(a==='rec-now'){await saveLog(b.dataset.t,{[b.dataset.f]:nowHM()})}
   else if(a==='rec-all'){const t=planTrips().find(x=>x.id===b.dataset.t);if(t)await saveLog(t.id,{rode:Object.fromEntries(tripKids(t).map(c=>[c,true]))})}
@@ -1180,7 +1219,12 @@ document.addEventListener('click',async e=>{
 document.addEventListener('change',async e=>{
   const el=e.target,a=el.dataset.act;if(!a)return;
   if(a==='date'&&el.value){S.date=el.value;subDay();render()}
-  else if(a==='att'){const c=el.dataset.c,fl=el.dataset.f;const cur=attendance().find(x=>x.c.id===c);S.day.attend={...S.day.attend,[c]:{on:cur.on,pickup:cur.pickup,drop:cur.drop,pickPlace:cur.pickPlace,pickTime:cur.pickTime,arriveBy:cur.arriveBy,dropTime:cur.dropTime,[fl]:el.type==='checkbox'?el.checked:el.value}};saveDay();render()}
+  else if(a==='att'){const c=el.dataset.c,fl=el.dataset.f,v=el.type==='checkbox'?el.checked:el.value;const cur=attendance().find(x=>x.c.id===c);
+    const r={on:cur.on,pickup:cur.pickup,drop:cur.drop,pickPlace:cur.pickPlace,pickOther:cur.pickOther,dropOther:cur.dropOther,pickTime:cur.pickTime,arriveBy:cur.arriveBy,dropTime:cur.dropTime};
+    if(fl==='pickSel'){if(v==='school'||v==='home')Object.assign(r,{pickup:true,pickPlace:v});else Object.assign(r,{pickup:false,pickOther:v==='none'?'':v})}
+    else if(fl==='dropSel'){if(v==='car')r.drop=true;else Object.assign(r,{drop:false,dropOther:v==='none'?'':v})}
+    else r[fl]=v;
+    S.day.attend={...S.day.attend,[c]:r};saveDay();render()}
   else if(a==='sf'){const p=S.staff.find(x=>x.id===el.dataset.p),w=wdOf(S.date);const cur={on:(p.days||[]).includes(w),start:p.start||'13:00',end:p.end||'19:00',...(S.day.staff?.[p.id]||{})};
     S.day.staff={...S.day.staff,[p.id]:{...cur,[el.dataset.f]:el.type==='checkbox'?el.checked:el.value}};saveDay();render()}
   else if(a==='schooltime'){S.day.schoolTimes={...S.day.schoolTimes,[el.dataset.s]:el.value};saveDay();render()}
@@ -1210,7 +1254,7 @@ document.addEventListener('change',e=>{const el=e.target;if(!el.dataset.fld)retu
   if(S.tab==='import'){const k=el.dataset.fld;if(k==='header'){S.imp.header=el.checked;if(S.imp.rows)setImpRows(S.imp.rows)}else if(k==='nick')S.imp.nick=el.checked;else if(k==='addr')S.imp.addr=el.checked;else if(k==='offOthers')S.imp.offOthers=el.checked;else if(k==='dateDefault')S.imp.dateDefault=el.value}});
 function downloadBlob(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function genPlan(){
-  const trips=autoPlan();S.day.plan={at:new Date().toISOString(),trips};S.view='vehicle';saveDay();render();
+  const trips=autoPlan();S.day.plan={at:new Date().toISOString(),trips};S.view='board';saveDay();render();
   const iss=validate(trips,L());toast(iss.some(i=>i.lv==='bad')?'作成しました。赤い項目を確認してください':'送迎表を作成しました');
 }
 boot();
