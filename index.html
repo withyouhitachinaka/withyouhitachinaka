@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>送迎表 | ウィズユーひたちなか</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header no-print">
+    <h1>送迎表</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-view="schedule">送迎表</button>
+      <button class="tab" data-view="users">利用者</button>
+      <button class="tab" data-view="resources">車両・職員</button>
+      <button class="tab" data-view="data">データ</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 送迎表 -->
+    <section id="view-schedule" class="view is-active">
+      <div class="toolbar no-print">
+        <div class="date-nav">
+          <button id="prev-day" aria-label="前日">◀</button>
+          <input type="date" id="date">
+          <button id="next-day" aria-label="翌日">▶</button>
+          <button id="today">今日</button>
+        </div>
+        <div class="actions">
+          <button id="generate" class="primary">利用予定から作成</button>
+          <button id="clear-day">この日をクリア</button>
+          <button id="print">印刷</button>
+        </div>
+      </div>
+
+      <h2 class="print-title" id="print-title"></h2>
+      <p class="summary" id="summary"></p>
+
+      <div id="absent-box" class="absent-box"></div>
+
+      <section class="trip-section">
+        <h3 class="trip-heading pickup">お迎え</h3>
+        <div class="board" id="board-pickup"></div>
+      </section>
+
+      <section class="trip-section">
+        <h3 class="trip-heading dropoff">お送り</h3>
+        <div class="board" id="board-dropoff"></div>
+      </section>
+    </section>
+
+    <!-- 利用者 -->
+    <section id="view-users" class="view">
+      <div class="toolbar">
+        <h2>利用者一覧</h2>
+        <button id="add-user" class="primary">＋ 利用者を追加</button>
+      </div>
+      <div class="table-wrap">
+        <table class="list">
+          <thead>
+            <tr>
+              <th>氏名</th><th>利用曜日</th><th>お迎え</th><th>お送り</th><th>既定車両</th><th>備考</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="user-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 車両・職員 -->
+    <section id="view-resources" class="view">
+      <div class="two-col">
+        <div class="panel">
+          <h2>車両</h2>
+          <form id="vehicle-form" class="inline-form">
+            <input name="name" placeholder="車両名（例：ハイエース1号）" required>
+            <input name="capacity" type="number" min="1" max="30" placeholder="定員" required>
+            <button class="primary">追加</button>
+          </form>
+          <ul id="vehicle-list" class="simple-list"></ul>
+        </div>
+        <div class="panel">
+          <h2>職員</h2>
+          <form id="staff-form" class="inline-form">
+            <input name="name" placeholder="氏名" required>
+            <label class="check"><input type="checkbox" name="canDrive" checked> 運転可</label>
+            <button class="primary">追加</button>
+          </form>
+          <ul id="staff-list" class="simple-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- データ -->
+    <section id="view-data" class="view">
+      <div class="panel">
+        <h2>データの保存・読込</h2>
+        <p>データはこのブラウザ内（localStorage）に保存されます。別の端末で使う場合やバックアップには、書き出したファイルを読み込んでください。</p>
+        <div class="actions">
+          <button id="export" class="primary">ファイルに書き出す</button>
+          <label class="button">ファイルを読み込む<input type="file" id="import" accept="application/json" hidden></label>
+        </div>
+      </div>
+      <div class="panel danger">
+        <h2>初期化</h2>
+        <p>すべてのデータを削除してサンプルデータに戻します。</p>
+        <button id="reset">サンプルデータに戻す</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="user-dialog">
+    <form id="user-form" method="dialog">
+      <h2 id="user-dialog-title">利用者</h2>
+      <input type="hidden" name="id">
+      <label>氏名<input name="name" required></label>
+      <label>電話番号<input name="phone" type="tel"></label>
+      <fieldset>
+        <legend>利用曜日</legend>
+        <div class="weekdays" id="weekday-checks"></div>
+      </fieldset>
+      <div class="grid-2">
+        <label>お迎え場所<input name="pickupPlace" placeholder="自宅・学校名など"></label>
+        <label>お迎え時刻<input name="pickupTime" type="time"></label>
+        <label>お送り場所<input name="dropoffPlace" placeholder="自宅など"></label>
+        <label>お送り時刻<input name="dropoffTime" type="time"></label>
+      </div>
+      <label>既定車両<select name="vehicleId"></select></label>
+      <label>備考<textarea name="note" rows="2" placeholder="車いす・チャイルドシート等"></textarea></label>
+      <div class="dialog-actions">
+        <button type="button" id="user-cancel">キャンセル</button>
+        <button type="submit" class="primary" value="save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
